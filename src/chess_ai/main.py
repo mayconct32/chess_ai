@@ -1,12 +1,16 @@
 from abc import ABC, abstractmethod
 from typing import Iterator
 from os import getenv
+import logging
 
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename='logs.log', encoding='utf-8')
 
 
 class APIKeyNotFoundError(Exception):
@@ -45,12 +49,19 @@ class AIGeminiService(AIModelService):
 
 
 def main():
-    API_KEY = getenv("API_KEY")
-    GEMINI_VERSION = "gemini-3.1-flash-lite"
-    gemini_service = AIGeminiService(API_KEY, GEMINI_VERSION)
-    for chunk in gemini_service.request("olá, Chat. Meu nome é magal."):
-        print(chunk, end="")
-    print()
+    try:
+        API_KEY =  getenv("API_KEY")
+        GEMINI_VERSION = "gemini-3.1-flash-lite"
+        gemini_service = AIGeminiService(API_KEY, GEMINI_VERSION)
+        for chunk in gemini_service.request("olá, Chat. Meu nome é magal."):
+            print(chunk, end="")
+        print()
+    except APIKeyNotFoundError as e:
+        logger.exception(e)
+        print(f"\033[31m APIKeyNotFoundError: {e}\033[m")
+    except Exception as e:
+        logger.exception(e)
+        print(f"\033[31m Internal server error: {e}\033[m")
 
 
 if __name__ == "__main__":

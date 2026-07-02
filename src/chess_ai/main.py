@@ -10,7 +10,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(filename='logs.log', encoding='utf-8')
+logging.basicConfig(filename='logs.log', encoding='utf-8', level=logging.INFO)
 
 
 class APIKeyNotFoundError(Exception):
@@ -94,6 +94,31 @@ class AIGeminiService(AIModelService):
         for chunk in self.connection.stream(prompt):
             if chunk.content:
                 yield chunk.content[0]["text"]
+
+
+class FileLoader(ABC):
+    """
+    interface for manipulating files
+    """
+    @abstractmethod
+    def loads_file(self):
+        """
+        loads information from a file
+        """
+        pass
+
+    @abstractmethod
+    def splits_file(self):
+        """
+        Split documents into smaller chunks for embedding and retrieval.
+        
+        Args:
+            file: List of documents to split
+            
+        Returns:
+            List: List of document chunks with preserved metadata
+        """
+        pass
 
 
 def main():

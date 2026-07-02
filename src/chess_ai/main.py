@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Iterator
-from os import getenv
+import os
 import logging
 
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 load_dotenv()
@@ -12,10 +14,22 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename='logs.log', encoding='utf-8', level=logging.INFO)
 
+CHUNK_SIZE = 2000
+CHUNK_OVERLAP = 500
+API_KEY = os.getenv("API_KEY")
+GEMINI_VERSION = "gemini-3.1-flash-lite"
+
 
 class APIKeyNotFoundError(Exception):
     """
     Custom error for API key not found
+    """
+    pass
+
+
+class FileNotFoundError(Exception):
+    """
+    Custom error for file not found
     """
     pass
 
@@ -96,6 +110,22 @@ class AIGeminiService(AIModelService):
                 yield chunk.content[0]["text"]
 
 
+def get_path(file_name: str) -> str:
+    """
+    Build absolute path relative to the module directory.
+    
+    Args:
+        file_name: Name or relative path of the file/directory
+        
+    Returns:
+        Absolute path to the file/directory
+    """
+    return os.path.join(
+        os.path.dirname(__file__),
+        file_name
+    )
+
+
 class FileLoader(ABC):
     """
     interface for manipulating files
@@ -121,21 +151,60 @@ class FileLoader(ABC):
         pass
 
 
+class PDFLoader(FileLoader):
+    def __init__(self, file_name):
+        self.filename = file_name
+
+    def loads_file(self):
+        """
+        Load PDF document from the default chess.pdf file.
+        
+        Returns:
+            List: List of loaded document pages
+            
+        Raises:
+            FileNotFoundError: If the PDF file is not found at the expected path
+        """
+        pdf_path = get_path(self.filename)
+        logger.info(f"Loading PDF from: {pdf_path}")
+        if not os.path.exists(pdf_path):
+            raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+        pdf_loader = PyPDFLoader(pdf_path)
+        documents = pdf_loader.load()
+        logger.info(f"Successfully loaded PDF: {len(documents)} pages")
+        return documents
+
+    def splits_file(self):
+        """
+        Split documents into smaller chunks for embedding and retrieval.
+        
+        Args:
+            file: List of documents to split
+            
+        Returns:
+            List: List of document chunks with preserved metadata
+        """
+        file_contents = self.loads_file()
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=CHUNK_SIZE,
+            chunk_overlap=CHUNK_OVERLAP,
+            length_function=len,
+            add_start_index=True
+        )
+        chunks = splitter.split_documents(file_contents)
+        logger.info(f"Created {len(chunks)} document chunks")
+        return chunks
+
+
 def main():
     try:
-        API_KEY =  getenv("API_KEY")
-        GEMINI_VERSION = "gemini-3.1-flash-lite"
-        gemini_service = AIGeminiService(API_KEY, GEMINI_VERSION)
-        for chunk in gemini_service.request("olá, Chat. Meu nome é magal."):
-            print(chunk, end="")
-        print()
-    except APIKeyNotFoundError as e:
+        pass
+    except (APIKeyNotFoundError, FileNotFoundError) as e:
         logger.exception(e)
-        print(f"\033[31m APIKeyNotFoundError: {e}\033[m")
+        print(f"\033[31m {type(e).__name__}: {e}\033[m")
     except Exception as e:
         logger.exception(e)
-        print(f"\033[31m Internal server error: {e}\033[m")
-
+        print(f"\033[31m Sorry, internal server error.\033[m")
 
 if __name__ == "__main__":
     main()

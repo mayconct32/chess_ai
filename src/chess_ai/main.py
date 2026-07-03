@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
+from langchain_chroma.vectorstores import Chroma
 
 
 load_dotenv()
@@ -18,6 +20,7 @@ CHUNK_SIZE = 2000
 CHUNK_OVERLAP = 500
 API_KEY = os.getenv("API_KEY")
 GEMINI_VERSION = "gemini-3.1-flash-lite"
+DATABASE_DIR = "database"
 
 
 class APIKeyNotFoundError(Exception):
@@ -30,6 +33,13 @@ class APIKeyNotFoundError(Exception):
 class FileNotFoundError(Exception):
     """
     Custom error for file not found
+    """
+    pass
+
+
+class VectorDatabaseCreationError(Exception):
+    """
+    Error while trying to create a vector database
     """
     pass
 
@@ -196,15 +206,36 @@ class PDFLoader(FileLoader):
         return chunks
 
 
-def main():
+def creates_vector_database(file_chunks) -> None:
+    """
+    Create a vector database (Chroma) from document chunks using embeddings.
+    
+    Args:
+        file_chunks: List of document chunks to vectorize
+    
+    Raises:
+        VectorDatabaseCreationError: if the creation of the database fails
+    """
+    logger.info("\n=== Starting database creation pipeline ===")
     try:
-        pass
-    except (APIKeyNotFoundError, FileNotFoundError) as e:
-        logger.exception(e)
-        print(f"\033[31m {type(e).__name__}: {e}\033[m")
-    except Exception as e:
-        logger.exception(e)
-        print(f"\033[31m Sorry, internal server error.\033[m")
+        logger.info("Initializing embeddings...")
+        embedding = FastEmbedEmbeddings()
+        db_path = get_path(DATABASE_DIR)
+        logger.info(f"Creating vector database at: {db_path}")
+        Chroma.from_documents(
+            documents=file_chunks,
+            embedding=embedding,
+            persist_directory=db_path
+        )
+        logger.info("Vector database created successfully!")
+        logger.info("=== Database pipeline completed successfully ===")
+    except Exception:
+        raise VectorDatabaseCreationError()
+    
+
+def main():
+    pass
+
 
 if __name__ == "__main__":
     main()

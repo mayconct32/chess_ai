@@ -27,21 +27,33 @@ class APIKeyNotFoundError(Exception):
     """
     Custom error for API key not found
     """
-    pass
+    def __init__(self):
+        super().__init__("API_KEY not found. Please set it in your .env file.")
 
 
 class FileNotFoundError(Exception):
     """
     Custom error for file not found
     """
-    pass
+    def __init__(self, file_path):
+        super().__init__(f"PDF file not found: {file_path}")
 
 
-class VectorDatabaseCreationError(Exception):
+class VectorDatabaseError(Exception):
     """
-    Error while trying to create a vector database
+    Custom exception for vector database-related errors.    
     """
-    pass
+    def __init__(self, *args):
+        super().__init__(*args)
+
+
+class VectorDatabaseCreationError(VectorDatabaseError):
+    """
+    Custom exception for errors occurring during the attempt 
+    to create the database.
+    """
+    def __init__(self):
+        super().__init__("Error while trying to create the database")
 
 
 class AIModelService(ABC):
@@ -55,6 +67,7 @@ class AIModelService(ABC):
         
         Args:
             prompt (str): instruction to be given to the AI
+            
         Returns:
             Iterator[str]: chunks of the AI response
         """
@@ -78,9 +91,7 @@ class AIGeminiService(AIModelService):
         """
         self._api_key = api_key
         if not self._api_key:
-            raise APIKeyNotFoundError(
-                "API_KEY not found. Please set it in your .env file."
-                )
+            raise APIKeyNotFoundError()
         self.gemini_version = gemini_version
         self.connection = None
 
@@ -178,7 +189,7 @@ class PDFLoader(FileLoader):
         pdf_path = get_path(self.filename)
         logger.info(f"Loading PDF from: {pdf_path}")
         if not os.path.exists(pdf_path):
-            raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+            raise FileNotFoundError(pdf_path)
         pdf_loader = PyPDFLoader(pdf_path)
         documents = pdf_loader.load()
         logger.info(f"Successfully loaded PDF: {len(documents)} pages")

@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Iterator
+from typing import Iterator, List
 import os
 import logging
+import threading
 
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from google import genai
+from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
@@ -13,8 +15,11 @@ from langchain_chroma.vectorstores import Chroma
 
 load_dotenv()
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
-logging.basicConfig(filename='logs.log', encoding='utf-8', level=logging.INFO)
 
 CHUNK_SIZE = 2000
 CHUNK_OVERLAP = 500
@@ -23,37 +28,85 @@ GEMINI_VERSION = "gemini-3.1-flash-lite"
 DATABASE_DIR = "database"
 
 
-class APIKeyNotFoundError(Exception):
+class AppError(Exception):
     """
-    Custom error for API key not found
+    Base class for every custom exception in this project.
+
+    Logs the message a single time, at creation, so callers never need
+    to write "logger.error(...)" right before a "raise" — that pattern
+    just repeats the exception's own message as boilerplate. Any
+    exception here should inherit from this class instead of Exception.
+    """
+    def __init__(self, message: str) -> None:
+        """
+        Method for initializing and logging the exception message
+
+        Args:
+            message (str): Human-readable description of the error
+        """
+        logger.error(message)
+        super().__init__(message)
+
+
+class APIKeyNotFoundError(AppError):
+    """
+    Custom exception for API key not found
     """
     def __init__(self):
+        """
+        Method for initializing the exception message
+        """
         super().__init__("API_KEY not found. Please set it in your .env file.")
 
 
-class FileNotFoundError(Exception):
+class PDFFileNotFoundError(AppError):
     """
-    Custom error for file not found
+    Custom exception for file not found
     """
     def __init__(self, file_path):
+        """
+        Method for initializing the exception message
+
+        Args:
+            file_path (str): Path of the PDF file that was not found
+        """
         super().__init__(f"PDF file not found: {file_path}")
 
 
-class VectorDatabaseError(Exception):
+class VectorDatabaseError(AppError):
     """
-    Custom exception for vector database-related errors.    
+    Custom exception for vector database-related errors
     """
-    def __init__(self, *args):
-        super().__init__(*args)
+    def __init__(self, message: str = "Vector database error") -> None:
+        """
+        Method for initializing the exception message
+
+        Args:
+            message (str): Description of the vector database error
+        """
+        super().__init__(message)
 
 
 class VectorDatabaseCreationError(VectorDatabaseError):
     """
-    Custom exception for errors occurring during the attempt 
-    to create the database.
+    Custom exception for errors occurring during the attempt
+    to create the database
     """
-    def __init__(self):
-        super().__init__("Error while trying to create the database")
+    def __init__(self, reason: str = None) -> None:
+        """
+        Method for initializing the exception message
+
+        Args:
+            reason (str, optional): Description of the underlying error
+                that caused the database creation to fail. When provided,
+                it is appended to the base message so the real cause is
+                not hidden behind a generic error.
+        """
+        message = "Error while trying to create the database"
+        if reason:
+            message = f"{message}: {reason}"
+
+        super().__init__(message)
 
 
 class AIModelService(ABC):
@@ -64,14 +117,35 @@ class AIModelService(ABC):
     def request(self, prompt: str) -> Iterator[str]:
         """
         Method for requesting something from the AI model
-        
+
         Args:
             prompt (str): instruction to be given to the AI
-            
+
         Returns:
             Iterator[str]: chunks of the AI response
         """
         pass
+
+    @abstractmethod
+    def close(self) -> None:
+        """
+        Method for closing the connection with the AI model
+        """
+        pass
+
+    def __enter__(self):
+        """
+        Enables use of the class as a context manager (with-statement).
+        The connection itself is opened lazily on first use, not here.
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """
+        Ensures the connection is closed when leaving a with-block,
+        even if an exception occurred inside it.
+        """
+        self.close()
 
 
 class AIGeminiService(AIModelService):
@@ -81,65 +155,102 @@ class AIGeminiService(AIModelService):
     def __init__(self, api_key: str, gemini_version: str) -> None:
         """
         Method for initializing instance attributes
-        
+
         Args:
             api_key (str): Access key for using Google AI models
             gemini_version (str): Name of the AI model to be used
-        
+        """
+        self._api_key = api_key
+        self.gemini_version = gemini_version
+        self.client = None
+        self._lock = threading.Lock()
+
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        """
+        Checks if the API key is missing
+
         Raises:
             APIKeyNotFoundError: if the API key is not found
         """
-        self._api_key = api_key
         if not self._api_key:
             raise APIKeyNotFoundError()
-        self.gemini_version = gemini_version
-        self.connection = None
 
-    def _connect(self) -> ChatGoogleGenerativeAI:
+    def _connect(self) -> genai.Client:
         """
         Initialize and return a connection to the Google Gemini API.
-    
+
         Returns:
-            ChatGoogleGenerativeAI: Initialized Gemini model instance
-            
-        Raises:
-            APIKeyNotFoundError: If API_KEY environment variable is not set
+            genai.Client: Initialized Gemini client instance
         """
-        model = ChatGoogleGenerativeAI(
-            model=self.gemini_version,
-            google_api_key=self._api_key
-        )
-        return model
+        logger.info("Opening connection with Gemini model")
+        client = genai.Client(api_key=self._api_key)
+
+        return client
 
     def request(self, prompt: str) -> Iterator[str]:
         """
         Method for requesting something from the AI model.
 
-        Yields chunks of text as they are generated by the model, enabling
-        real-time streaming for interactive use.
-        
+        Opens a connection immediately if one doesn't exist yet
+        (protected by a lock against concurrent calls), then returns
+        a generator that streams the response.
+
         Args:
-            prompt: The input prompt/message for the model
-            
+            prompt (str): The input prompt/message for the model
+
+        Returns:
+            Iterator[str]: Text chunks from the model response
+        """
+        with self._lock:
+            if not self.client:
+                self.client = self._connect()
+
+        return self._stream_response(prompt)
+
+    def _stream_response(self, prompt: str) -> Iterator[str]:
+        """
+        Generator that yields chunks of text from an already-open connection.
+
+        Args:
+            prompt (str): The input prompt/message for the model
+
         Yields:
             str: Text chunks from the model response
         """
-        if not self.connection:
-            self.connection = self._connect()
-        for chunk in self.connection.stream(prompt):
-            if chunk.content:
-                yield chunk.content[0]["text"]
+        stream = self.client.models.generate_content_stream(
+            model=self.gemini_version,
+            contents=prompt
+        )
+
+        for chunk in stream:
+            if chunk.text:
+                yield chunk.text
+
+    def close(self) -> None:
+        """
+        Method for closing the connection with the AI model.
+
+        Protected by a lock to avoid closing a client that another
+        thread is in the middle of creating.
+        """
+        with self._lock:
+            if self.client:
+                logger.info("Closing connection with Gemini model")
+                self.client.close()
+                self.client = None
 
 
 def get_path(file_name: str) -> str:
     """
     Build absolute path relative to the module directory.
-    
+
     Args:
-        file_name: Name or relative path of the file/directory
-        
+        file_name (str): Name or relative path of the file/directory
+
     Returns:
-        Absolute path to the file/directory
+        str: Absolute path to the file/directory
     """
     return os.path.join(
         os.path.dirname(__file__),
@@ -149,63 +260,84 @@ def get_path(file_name: str) -> str:
 
 class FileLoader(ABC):
     """
-    interface for manipulating files
+    Interface for manipulating files
     """
     @abstractmethod
-    def loads_file(self):
+    def loads_file(self) -> List[Document]:
         """
-        loads information from a file
-        """
-        pass
+        Loads information from a file
 
-    @abstractmethod
-    def splits_file(self):
-        """
-        Split documents into smaller chunks for embedding and retrieval.
-        
-        Args:
-            file: List of documents to split
-            
         Returns:
-            List: List of document chunks with preserved metadata
+            List[Document]: List of loaded document contents
         """
         pass
 
 
 class PDFLoader(FileLoader):
-    def __init__(self, file_name):
-        self.filename = file_name
+    """
+    Class to load PDF files
+    """
+    def __init__(self, file_path: str) -> None:
+        """
+        Method for initializing instance attributes
 
-    def loads_file(self):
+        Args:
+            file_path (str): Absolute path of the PDF file to be loaded
         """
-        Load PDF document from the default chess.pdf file.
-        
-        Returns:
-            List: List of loaded document pages
-            
+        self.file_path = file_path
+
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        """
+        Checks if the PDF file exists at the given path
+
         Raises:
-            FileNotFoundError: If the PDF file is not found at the expected path
+            PDFFileNotFoundError: If the PDF file is not found at the given path
         """
-        pdf_path = get_path(self.filename)
-        logger.info(f"Loading PDF from: {pdf_path}")
-        if not os.path.exists(pdf_path):
-            raise FileNotFoundError(pdf_path)
-        pdf_loader = PyPDFLoader(pdf_path)
+        if not os.path.exists(self.file_path):
+            raise PDFFileNotFoundError(self.file_path)
+
+    def loads_file(self) -> List[Document]:
+        """
+        Load the PDF document specified during initialization.
+
+        Returns:
+            List[Document]: List of loaded document pages
+        """
+        logger.info(f"Loading PDF from: {self.file_path}")
+
+        pdf_loader = PyPDFLoader(self.file_path)
         documents = pdf_loader.load()
+
         logger.info(f"Successfully loaded PDF: {len(documents)} pages")
+
         return documents
 
-    def splits_file(self):
+
+class FileSplitter:
+    """
+    Class to split file contents into smaller chunks
+    """
+    def __init__(self, file_loader: FileLoader) -> None:
+        """
+        Method for initializing instance attributes
+
+        Args:
+            file_loader (FileLoader): instance of a class that implements
+                the FileLoader interface, used to load the file's contents
+        """
+        self.file_loader = file_loader
+
+    def splits_file(self) -> List[Document]:
         """
         Split documents into smaller chunks for embedding and retrieval.
-        
-        Args:
-            file: List of documents to split
-            
+
         Returns:
-            List: List of document chunks with preserved metadata
+            List[Document]: List of document chunks with preserved metadata
         """
-        file_contents = self.loads_file()
+        file_contents = self.file_loader.loads_file()
+
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=CHUNK_SIZE,
             chunk_overlap=CHUNK_OVERLAP,
@@ -213,36 +345,103 @@ class PDFLoader(FileLoader):
             add_start_index=True
         )
         chunks = splitter.split_documents(file_contents)
+
         logger.info(f"Created {len(chunks)} document chunks")
+
         return chunks
 
 
-def creates_vector_database(file_chunks) -> None:
+class EmbeddingProvider(ABC):
     """
-    Create a vector database (Chroma) from document chunks using embeddings.
-    
-    Args:
-        file_chunks: List of document chunks to vectorize
-    
-    Raises:
-        VectorDatabaseCreationError: if the creation of the database fails
+    Interface for classes responsible for supplying an embedding model.
+
+    Its single responsibility is deciding *which* embedding to use and
+    how to initialize it — nothing about persisting or vectorizing
+    documents lives here.
     """
-    logger.info("\n=== Starting database creation pipeline ===")
-    try:
+    @abstractmethod
+    def get_embedding(self):
+        """
+        Build and return an embedding model instance.
+
+        Returns:
+            Embeddings: An embedding model compatible with Chroma
+        """
+        pass
+
+
+class FastEmbedEmbeddingProvider(EmbeddingProvider):
+    """
+    Supplies embeddings using FastEmbedEmbeddings.
+    """
+    def get_embedding(self):
+        """
+        Build and return a FastEmbedEmbeddings instance.
+
+        Returns:
+            FastEmbedEmbeddings: Initialized embedding model
+        """
         logger.info("Initializing embeddings...")
-        embedding = FastEmbedEmbeddings()
-        db_path = get_path(DATABASE_DIR)
-        logger.info(f"Creating vector database at: {db_path}")
-        Chroma.from_documents(
-            documents=file_chunks,
-            embedding=embedding,
-            persist_directory=db_path
-        )
-        logger.info("Vector database created successfully!")
-        logger.info("=== Database pipeline completed successfully ===")
-    except Exception:
-        raise VectorDatabaseCreationError()
-    
+        return FastEmbedEmbeddings()
+
+
+class VectorDatabaseCreator:
+    """
+    Responsible solely for creating and persisting a Chroma vector
+    database from document chunks.
+
+    It does not decide which embedding to use (that's EmbeddingProvider's
+    job) and it does not build the persist path (that's get_path's job) —
+    it only receives those as collaborators and focuses on the single
+    task of creating the database, translating any low-level failure
+    into a VectorDatabaseCreationError.
+    """
+    def __init__(
+        self,
+        embedding_provider: EmbeddingProvider,
+        persist_directory: str
+    ) -> None:
+        """
+        Method for initializing instance attributes
+
+        Args:
+            embedding_provider (EmbeddingProvider): supplies the
+                embedding model to use when vectorizing documents
+            persist_directory (str): path where the vector database
+                will be persisted
+        """
+        self.embedding_provider = embedding_provider
+        self.persist_directory = persist_directory
+
+    def create(self, file_chunks: List[Document]) -> None:
+        """
+        Create a vector database (Chroma) from document chunks.
+
+        Args:
+            file_chunks (List[Document]): List of document chunks to vectorize
+
+        Raises:
+            VectorDatabaseCreationError: if the creation of the database fails
+        """
+        logger.info("Starting database creation pipeline")
+
+        try:
+            embedding = self.embedding_provider.get_embedding()
+
+            logger.info(f"Creating vector database at: {self.persist_directory}")
+
+            Chroma.from_documents(
+                documents=file_chunks,
+                embedding=embedding,
+                persist_directory=self.persist_directory
+            )
+
+            logger.info("Vector database created successfully!")
+            logger.info("Database pipeline completed successfully")
+
+        except Exception as e:
+            raise VectorDatabaseCreationError(str(e)) from e
+
 
 def main():
     pass

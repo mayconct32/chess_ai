@@ -252,20 +252,26 @@ class PDFLoader(FileLoader):
         """
         self.file_path = file_path
 
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        """
+        Checks if the PDF file exists at the given path
+
+        Raises:
+            PDFFileNotFoundError: If the PDF file is not found at the given path
+        """
+        if not os.path.exists(self.file_path):
+            raise PDFFileNotFoundError(self.file_path)
+
     def loads_file(self) -> List[Document]:
         """
         Load the PDF document specified during initialization.
 
         Returns:
             List[Document]: List of loaded document pages
-
-        Raises:
-            PDFFileNotFoundError: If the PDF file is not found at the given path
         """
         logger.info(f"Loading PDF from: {self.file_path}")
-
-        if not os.path.exists(self.file_path):
-            raise PDFFileNotFoundError(self.file_path)
 
         pdf_loader = PyPDFLoader(self.file_path)
         documents = pdf_loader.load()

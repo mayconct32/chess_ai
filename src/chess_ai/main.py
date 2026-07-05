@@ -15,8 +15,11 @@ from langchain_chroma.vectorstores import Chroma
 
 load_dotenv()
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
-logging.basicConfig(filename='logs.log', encoding='utf-8', level=logging.INFO)
 
 CHUNK_SIZE = 2000
 CHUNK_OVERLAP = 500
@@ -25,7 +28,27 @@ GEMINI_VERSION = "gemini-3.1-flash-lite"
 DATABASE_DIR = "database"
 
 
-class APIKeyNotFoundError(Exception):
+class AppError(Exception):
+    """
+    Base class for every custom exception in this project.
+
+    Logs the message a single time, at creation, so callers never need
+    to write "logger.error(...)" right before a "raise" — that pattern
+    just repeats the exception's own message as boilerplate. Any
+    exception here should inherit from this class instead of Exception.
+    """
+    def __init__(self, message: str) -> None:
+        """
+        Method for initializing and logging the exception message
+
+        Args:
+            message (str): Human-readable description of the error
+        """
+        logger.error(message)
+        super().__init__(message)
+
+
+class APIKeyNotFoundError(AppError):
     """
     Custom exception for API key not found
     """
@@ -36,7 +59,7 @@ class APIKeyNotFoundError(Exception):
         super().__init__("API_KEY not found. Please set it in your .env file.")
 
 
-class PDFFileNotFoundError(Exception):
+class PDFFileNotFoundError(AppError):
     """
     Custom exception for file not found
     """
@@ -50,18 +73,18 @@ class PDFFileNotFoundError(Exception):
         super().__init__(f"PDF file not found: {file_path}")
 
 
-class VectorDatabaseError(Exception):
+class VectorDatabaseError(AppError):
     """
     Custom exception for vector database-related errors
     """
-    def __init__(self, *args):
+    def __init__(self, message: str = "Vector database error") -> None:
         """
         Method for initializing the exception message
 
         Args:
-            *args: Arguments passed to the base Exception class
+            message (str): Description of the vector database error
         """
-        super().__init__(*args)
+        super().__init__(message)
 
 
 class VectorDatabaseCreationError(VectorDatabaseError):
@@ -151,6 +174,7 @@ class AIGeminiService(AIModelService):
         Returns:
             genai.Client: Initialized Gemini client instance
         """
+        logger.info("Opening connection with Gemini model")
         client = genai.Client(api_key=self._api_key)
 
         return client
@@ -276,7 +300,7 @@ class PDFLoader(FileLoader):
         pdf_loader = PyPDFLoader(self.file_path)
         documents = pdf_loader.load()
 
-        logger.info(f"Successfully  loaded PDF: {len(documents)} pages")
+        logger.info(f"Successfully loaded PDF: {len(documents)} pages")
 
         return documents
 
@@ -327,7 +351,7 @@ def creates_vector_database(file_chunks: List[Document]) -> None:
     Raises:
         VectorDatabaseCreationError: if the creation of the database fails
     """
-    logger.info("\n=== Starting database creation pipeline ===")
+    logger.info("Starting database creation pipeline")
 
     try:
         logger.info("Initializing embeddings...")
@@ -343,10 +367,10 @@ def creates_vector_database(file_chunks: List[Document]) -> None:
         )
 
         logger.info("Vector database created successfully!")
-        logger.info("=== Database pipeline completed successfully ===")
+        logger.info("Database pipeline completed successfully")
 
-    except Exception:
-        raise VectorDatabaseCreationError()
+    except Exception as e:
+        raise VectorDatabaseCreationError() from e
 
 
 def main():

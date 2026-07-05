@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Iterator
+from typing import Iterator, List
 import os
 import logging
 import threading
 
 from dotenv import load_dotenv
 from google import genai
+from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
@@ -228,12 +229,12 @@ class FileLoader(ABC):
     Interface for manipulating files
     """
     @abstractmethod
-    def loads_file(self):
+    def loads_file(self) -> List[Document]:
         """
         Loads information from a file
 
         Returns:
-            List: List of loaded document contents
+            List[Document]: List of loaded document contents
         """
         pass
 
@@ -242,7 +243,7 @@ class PDFLoader(FileLoader):
     """
     Class to load PDF files
     """
-    def __init__(self, file_name):
+    def __init__(self, file_name: str) -> None:
         """
         Method for initializing instance attributes
 
@@ -251,12 +252,12 @@ class PDFLoader(FileLoader):
         """
         self.filename = file_name
 
-    def loads_file(self):
+    def loads_file(self) -> List[Document]:
         """
         Load the PDF document specified during initialization.
 
         Returns:
-            List: List of loaded document pages
+            List[Document]: List of loaded document pages
 
         Raises:
             PDFFileNotFoundError: If the PDF file is not found at the expected path
@@ -279,7 +280,7 @@ class FileSplitter:
     """
     Class to split file contents into smaller chunks
     """
-    def __init__(self, file_loader: FileLoader):
+    def __init__(self, file_loader: FileLoader) -> None:
         """
         Method for initializing instance attributes
 
@@ -289,12 +290,12 @@ class FileSplitter:
         """
         self.file_loader = file_loader
 
-    def splits_file(self):
+    def splits_file(self) -> List[Document]:
         """
         Split documents into smaller chunks for embedding and retrieval.
 
         Returns:
-            List: List of document chunks with preserved metadata
+            List[Document]: List of document chunks with preserved metadata
         """
         file_contents = self.file_loader.loads_file()
 
@@ -311,12 +312,12 @@ class FileSplitter:
         return chunks
 
 
-def creates_vector_database(file_chunks) -> None:
+def creates_vector_database(file_chunks: List[Document]) -> None:
     """
     Create a vector database (Chroma) from document chunks using embeddings.
 
     Args:
-        file_chunks (List): List of document chunks to vectorize
+        file_chunks (List[Document]): List of document chunks to vectorize
 
     Raises:
         VectorDatabaseCreationError: if the creation of the database fails

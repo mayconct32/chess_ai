@@ -164,22 +164,15 @@ class FileLoader(ABC):
         """
         pass
 
-    @abstractmethod
-    def splits_file(self):
-        """
-        Split documents into smaller chunks for embedding and retrieval.
-        
-        Args:
-            file: List of documents to split
-            
-        Returns:
-            List: List of document chunks with preserved metadata
-        """
-        pass
-
 
 class PDFLoader(FileLoader):
     def __init__(self, file_name):
+        """
+        Method for initializing instance attributes
+
+        Args:
+            file_name (str): Name or relative path of the PDF file to be loaded
+        """
         self.filename = file_name
 
     def loads_file(self):
@@ -201,17 +194,26 @@ class PDFLoader(FileLoader):
         logger.info(f"Successfully  loaded PDF: {len(documents)} pages")
         return documents
 
+
+class FileSplitter:
+    def __init__(self, file_loader: FileLoader):
+        """
+        Method for initializing instance attributes
+
+        Args:
+            file_loader (FileLoader): instance of a class that implements
+                the FileLoader interface, used to load the file's contents
+        """
+        self.file_loader = file_loader
+
     def splits_file(self):
         """
         Split documents into smaller chunks for embedding and retrieval.
-        
-        Args:
-            file: List of documents to split
-            
+
         Returns:
             List: List of document chunks with preserved metadata
         """
-        file_contents = self.loads_file()
+        file_contents = self.file_loader.loads_file()
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=CHUNK_SIZE,
             chunk_overlap=CHUNK_OVERLAP,

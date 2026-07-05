@@ -85,15 +85,21 @@ class AIGeminiService(AIModelService):
         Args:
             api_key (str): Access key for using Google AI models
             gemini_version (str): Name of the AI model to be used
-        
+        """
+        self._api_key = api_key
+        self.gemini_version = gemini_version
+        self.connection = None
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        """
+        Checks if the API key is missing
+
         Raises:
             APIKeyNotFoundError: if the API key is not found
         """
-        self._api_key = api_key
         if not self._api_key:
             raise APIKeyNotFoundError()
-        self.gemini_version = gemini_version
-        self.connection = None
 
     def _connect(self) -> ChatGoogleGenerativeAI:
         """
@@ -192,7 +198,7 @@ class PDFLoader(FileLoader):
             raise FileNotFoundError(pdf_path)
         pdf_loader = PyPDFLoader(pdf_path)
         documents = pdf_loader.load()
-        logger.info(f"Successfully loaded PDF: {len(documents)} pages")
+        logger.info(f"Successfully  loaded PDF: {len(documents)} pages")
         return documents
 
     def splits_file(self):

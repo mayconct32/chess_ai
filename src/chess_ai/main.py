@@ -92,11 +92,21 @@ class VectorDatabaseCreationError(VectorDatabaseError):
     Custom exception for errors occurring during the attempt
     to create the database
     """
-    def __init__(self):
+    def __init__(self, reason: str = None) -> None:
         """
         Method for initializing the exception message
+
+        Args:
+            reason (str, optional): Description of the underlying error
+                that caused the database creation to fail. When provided,
+                it is appended to the base message so the real cause is
+                not hidden behind a generic error.
         """
-        super().__init__("Error while trying to create the database")
+        message = "Error while trying to create the database"
+        if reason:
+            message = f"{message}: {reason}"
+
+        super().__init__(message)
 
 
 class AIModelService(ABC):
@@ -370,7 +380,7 @@ def creates_vector_database(file_chunks: List[Document]) -> None:
         logger.info("Database pipeline completed successfully")
 
     except Exception as e:
-        raise VectorDatabaseCreationError() from e
+        raise VectorDatabaseCreationError(str(e)) from e
 
 
 def main():

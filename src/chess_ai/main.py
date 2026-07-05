@@ -351,36 +351,96 @@ class FileSplitter:
         return chunks
 
 
-def creates_vector_database(file_chunks: List[Document]) -> None:
+class EmbeddingProvider(ABC):
     """
-    Create a vector database (Chroma) from document chunks using embeddings.
+    Interface for classes responsible for supplying an embedding model.
 
-    Args:
-        file_chunks (List[Document]): List of document chunks to vectorize
-
-    Raises:
-        VectorDatabaseCreationError: if the creation of the database fails
+    Its single responsibility is deciding *which* embedding to use and
+    how to initialize it — nothing about persisting or vectorizing
+    documents lives here.
     """
-    logger.info("Starting database creation pipeline")
+    @abstractmethod
+    def get_embedding(self):
+        """
+        Build and return an embedding model instance.
 
-    try:
+        Returns:
+            Embeddings: An embedding model compatible with Chroma
+        """
+        pass
+
+
+class FastEmbedEmbeddingProvider(EmbeddingProvider):
+    """
+    Supplies embeddings using FastEmbedEmbeddings.
+    """
+    def get_embedding(self):
+        """
+        Build and return a FastEmbedEmbeddings instance.
+
+        Returns:
+            FastEmbedEmbeddings: Initialized embedding model
+        """
         logger.info("Initializing embeddings...")
-        embedding = FastEmbedEmbeddings()
+        return FastEmbedEmbeddings()
 
-        db_path = get_path(DATABASE_DIR)
-        logger.info(f"Creating vector database at: {db_path}")
 
-        Chroma.from_documents(
-            documents=file_chunks,
-            embedding=embedding,
-            persist_directory=db_path
-        )
+class VectorDatabaseCreator:
+    """
+    Responsible solely for creating and persisting a Chroma vector
+    database from document chunks.
 
-        logger.info("Vector database created successfully!")
-        logger.info("Database pipeline completed successfully")
+    It does not decide which embedding to use (that's EmbeddingProvider's
+    job) and it does not build the persist path (that's get_path's job) —
+    it only receives those as collaborators and focuses on the single
+    task of creating the database, translating any low-level failure
+    into a VectorDatabaseCreationError.
+    """
+    def __init__(
+        self,
+        embedding_provider: EmbeddingProvider,
+        persist_directory: str
+    ) -> None:
+        """
+        Method for initializing instance attributes
 
-    except Exception as e:
-        raise VectorDatabaseCreationError(str(e)) from e
+        Args:
+            embedding_provider (EmbeddingProvider): supplies the
+                embedding model to use when vectorizing documents
+            persist_directory (str): path where the vector database
+                will be persisted
+        """
+        self.embedding_provider = embedding_provider
+        self.persist_directory = persist_directory
+
+    def create(self, file_chunks: List[Document]) -> None:
+        """
+        Create a vector database (Chroma) from document chunks.
+
+        Args:
+            file_chunks (List[Document]): List of document chunks to vectorize
+
+        Raises:
+            VectorDatabaseCreationError: if the creation of the database fails
+        """
+        logger.info("Starting database creation pipeline")
+
+        try:
+            embedding = self.embedding_provider.get_embedding()
+
+            logger.info(f"Creating vector database at: {self.persist_directory}")
+
+            Chroma.from_documents(
+                documents=file_chunks,
+                embedding=embedding,
+                persist_directory=self.persist_directory
+            )
+
+            logger.info("Vector database created successfully!")
+            logger.info("Database pipeline completed successfully")
+
+        except Exception as e:
+            raise VectorDatabaseCreationError(str(e)) from e
 
 
 def main():

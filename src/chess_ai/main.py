@@ -243,14 +243,14 @@ class PDFLoader(FileLoader):
     """
     Class to load PDF files
     """
-    def __init__(self, file_name: str) -> None:
+    def __init__(self, file_path: str) -> None:
         """
         Method for initializing instance attributes
 
         Args:
-            file_name (str): Name or relative path of the PDF file to be loaded
+            file_path (str): Absolute path of the PDF file to be loaded
         """
-        self.filename = file_name
+        self.file_path = file_path
 
     def loads_file(self) -> List[Document]:
         """
@@ -260,15 +260,14 @@ class PDFLoader(FileLoader):
             List[Document]: List of loaded document pages
 
         Raises:
-            PDFFileNotFoundError: If the PDF file is not found at the expected path
+            PDFFileNotFoundError: If the PDF file is not found at the given path
         """
-        pdf_path = get_path(self.filename)
-        logger.info(f"Loading PDF from: {pdf_path}")
+        logger.info(f"Loading PDF from: {self.file_path}")
 
-        if not os.path.exists(pdf_path):
-            raise PDFFileNotFoundError(pdf_path)
+        if not os.path.exists(self.file_path):
+            raise PDFFileNotFoundError(self.file_path)
 
-        pdf_loader = PyPDFLoader(pdf_path)
+        pdf_loader = PyPDFLoader(self.file_path)
         documents = pdf_loader.load()
 
         logger.info(f"Successfully  loaded PDF: {len(documents)} pages")

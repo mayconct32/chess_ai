@@ -107,6 +107,7 @@ class AIGeminiService(AIModelService):
         self._api_key = api_key
         self.gemini_version = gemini_version
         self.connection = None
+
         self.__post_init__()
 
     def __post_init__(self) -> None:
@@ -133,6 +134,7 @@ class AIGeminiService(AIModelService):
             model=self.gemini_version,
             google_api_key=self._api_key
         )
+
         return model
 
     def request(self, prompt: str) -> Iterator[str]:
@@ -150,6 +152,7 @@ class AIGeminiService(AIModelService):
         """
         if not self.connection:
             self.connection = self._connect()
+
         for chunk in self.connection.stream(prompt):
             if chunk.content:
                 yield chunk.content[0]["text"]
@@ -211,11 +214,15 @@ class PDFLoader(FileLoader):
         """
         pdf_path = get_path(self.filename)
         logger.info(f"Loading PDF from: {pdf_path}")
+
         if not os.path.exists(pdf_path):
             raise PDFFileNotFoundError(pdf_path)
+
         pdf_loader = PyPDFLoader(pdf_path)
         documents = pdf_loader.load()
+
         logger.info(f"Successfully  loaded PDF: {len(documents)} pages")
+
         return documents
 
 
@@ -241,6 +248,7 @@ class FileSplitter:
             List: List of document chunks with preserved metadata
         """
         file_contents = self.file_loader.loads_file()
+
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=CHUNK_SIZE,
             chunk_overlap=CHUNK_OVERLAP,
@@ -248,7 +256,9 @@ class FileSplitter:
             add_start_index=True
         )
         chunks = splitter.split_documents(file_contents)
+
         logger.info(f"Created {len(chunks)} document chunks")
+
         return chunks
 
 
@@ -263,18 +273,23 @@ def creates_vector_database(file_chunks) -> None:
         VectorDatabaseCreationError: if the creation of the database fails
     """
     logger.info("\n=== Starting database creation pipeline ===")
+
     try:
         logger.info("Initializing embeddings...")
         embedding = FastEmbedEmbeddings()
+
         db_path = get_path(DATABASE_DIR)
         logger.info(f"Creating vector database at: {db_path}")
+
         Chroma.from_documents(
             documents=file_chunks,
             embedding=embedding,
             persist_directory=db_path
         )
+
         logger.info("Vector database created successfully!")
         logger.info("=== Database pipeline completed successfully ===")
+
     except Exception:
         raise VectorDatabaseCreationError()
 

@@ -73,6 +73,117 @@ class PDFFileNotFoundError(AppError):
         super().__init__(f"PDF file not found: {file_path}")
 
 
+class AIModelError(AppError):
+    """
+    Base class for every exception related to the AI model service
+    (connection, request/streaming, shutdown, etc.).
+    """
+    def __init__(self, message: str = "AI model error") -> None:
+        """
+        Method for initializing the exception message
+
+        Args:
+            message (str): Description of the AI model error
+        """
+        super().__init__(message)
+
+
+class AIModelConnectionError(AIModelError):
+    """
+    Custom exception for failures while opening a connection
+    with the AI model provider.
+    """
+    def __init__(self, reason: str = None) -> None:
+        """
+        Method for initializing the exception message
+
+        Args:
+            reason (str, optional): Description of the underlying error
+                that caused the connection to fail.
+        """
+        message = "Error while trying to connect to the AI model"
+        if reason:
+            message = f"{message}: {reason}"
+
+        super().__init__(message)
+
+
+class AIModelRequestError(AIModelError):
+    """
+    Custom exception for failures while requesting/streaming a
+    response from the AI model.
+    """
+    def __init__(self, reason: str = None) -> None:
+        """
+        Method for initializing the exception message
+
+        Args:
+            reason (str, optional): Description of the underlying error
+                that caused the request to fail.
+        """
+        message = "Error while requesting a response from the AI model"
+        if reason:
+            message = f"{message}: {reason}"
+
+        super().__init__(message)
+
+
+class FileProcessingError(AppError):
+    """
+    Base class for every exception related to loading or splitting
+    files before they are vectorized.
+    """
+    def __init__(self, message: str = "File processing error") -> None:
+        """
+        Method for initializing the exception message
+
+        Args:
+            message (str): Description of the file processing error
+        """
+        super().__init__(message)
+
+
+class PDFLoadError(FileProcessingError):
+    """
+    Custom exception for failures while parsing/loading the
+    contents of a PDF file that does exist on disk.
+    """
+    def __init__(self, file_path: str, reason: str = None) -> None:
+        """
+        Method for initializing the exception message
+
+        Args:
+            file_path (str): Path of the PDF file that failed to load
+            reason (str, optional): Description of the underlying error
+                that caused the load to fail.
+        """
+        message = f"Error while trying to load PDF file: {file_path}"
+        if reason:
+            message = f"{message}: {reason}"
+
+        super().__init__(message)
+
+
+class FileSplitError(FileProcessingError):
+    """
+    Custom exception for failures while splitting documents
+    into smaller chunks.
+    """
+    def __init__(self, reason: str = None) -> None:
+        """
+        Method for initializing the exception message
+
+        Args:
+            reason (str, optional): Description of the underlying error
+                that caused the split to fail.
+        """
+        message = "Error while trying to split file contents"
+        if reason:
+            message = f"{message}: {reason}"
+
+        super().__init__(message)
+
+
 class VectorDatabaseError(AppError):
     """
     Custom exception for vector database-related errors
@@ -84,6 +195,26 @@ class VectorDatabaseError(AppError):
         Args:
             message (str): Description of the vector database error
         """
+        super().__init__(message)
+
+
+class EmbeddingError(VectorDatabaseError):
+    """
+    Custom exception for failures while building the embedding
+    model used to vectorize documents.
+    """
+    def __init__(self, reason: str = None) -> None:
+        """
+        Method for initializing the exception message
+
+        Args:
+            reason (str, optional): Description of the underlying error
+                that caused the embedding creation to fail.
+        """
+        message = "Error while trying to create the embedding model"
+        if reason:
+            message = f"{message}: {reason}"
+
         super().__init__(message)
 
 
@@ -183,9 +314,16 @@ class AIGeminiService(AIModelService):
 
         Returns:
             genai.Client: Initialized Gemini client instance
+
+        Raises:
+            AIModelConnectionError: if the connection to Gemini fails
         """
         logger.info("Opening connection with Gemini model")
-        client = genai.Client(api_key=self._api_key)
+
+        try:
+            client = genai.Client(api_key=self._api_key)
+        except Exception as e:
+            raise AIModelConnectionError(str(e)) from e
 
         return client
 
@@ -202,6 +340,9 @@ class AIGeminiService(AIModelService):
 
         Returns:
             Iterator[str]: Text chunks from the model response
+
+        Raises:
+            AIModelConnectionError: if opening the connection fails
         """
         with self._lock:
             if not self.client:
@@ -218,15 +359,23 @@ class AIGeminiService(AIModelService):
 
         Yields:
             str: Text chunks from the model response
-        """
-        stream = self.client.models.generate_content_stream(
-            model=self.gemini_version,
-            contents=prompt
-        )
 
-        for chunk in stream:
-            if chunk.text:
-                yield chunk.text
+        Raises:
+            AIModelRequestError: if the request or streaming fails
+        """
+        try:
+            stream = self.client.models.generate_content_stream(
+                model=self.gemini_version,
+                contents=prompt
+            )
+
+            for chunk in stream:
+                if chunk.text:
+                    yield chunk.text
+        except AppError:
+            raise
+        except Exception as e:
+            raise AIModelRequestError(str(e)) from e
 
     def close(self) -> None:
         """
@@ -234,12 +383,19 @@ class AIGeminiService(AIModelService):
 
         Protected by a lock to avoid closing a client that another
         thread is in the middle of creating.
+
+        Raises:
+            AIModelConnectionError: if closing the connection fails
         """
         with self._lock:
             if self.client:
                 logger.info("Closing connection with Gemini model")
-                self.client.close()
-                self.client = None
+                try:
+                    self.client.close()
+                except Exception as e:
+                    raise AIModelConnectionError(str(e)) from e
+                finally:
+                    self.client = None
 
 
 def get_path(file_name: str) -> str:
@@ -304,11 +460,17 @@ class PDFLoader(FileLoader):
 
         Returns:
             List[Document]: List of loaded document pages
+
+        Raises:
+            PDFLoadError: if the PDF exists but fails to be parsed/loaded
         """
         logger.info(f"Loading PDF from: {self.file_path}")
 
-        pdf_loader = PyPDFLoader(self.file_path)
-        documents = pdf_loader.load()
+        try:
+            pdf_loader = PyPDFLoader(self.file_path)
+            documents = pdf_loader.load()
+        except Exception as e:
+            raise PDFLoadError(self.file_path, str(e)) from e
 
         logger.info(f"Successfully loaded PDF: {len(documents)} pages")
 
@@ -335,16 +497,22 @@ class FileSplitter:
 
         Returns:
             List[Document]: List of document chunks with preserved metadata
+
+        Raises:
+            FileSplitError: if splitting the loaded documents fails
         """
         file_contents = self.file_loader.loads_file()
 
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=CHUNK_SIZE,
-            chunk_overlap=CHUNK_OVERLAP,
-            length_function=len,
-            add_start_index=True
-        )
-        chunks = splitter.split_documents(file_contents)
+        try:
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=CHUNK_SIZE,
+                chunk_overlap=CHUNK_OVERLAP,
+                length_function=len,
+                add_start_index=True
+            )
+            chunks = splitter.split_documents(file_contents)
+        except Exception as e:
+            raise FileSplitError(str(e)) from e
 
         logger.info(f"Created {len(chunks)} document chunks")
 
@@ -380,9 +548,16 @@ class FastEmbedEmbeddingProvider(EmbeddingProvider):
 
         Returns:
             FastEmbedEmbeddings: Initialized embedding model
+
+        Raises:
+            EmbeddingError: if the embedding model fails to initialize
         """
         logger.info("Initializing embeddings...")
-        return FastEmbedEmbeddings()
+
+        try:
+            return FastEmbedEmbeddings()
+        except Exception as e:
+            raise EmbeddingError(str(e)) from e
 
 
 class VectorDatabaseCreator:
@@ -439,6 +614,8 @@ class VectorDatabaseCreator:
             logger.info("Vector database created successfully!")
             logger.info("Database pipeline completed successfully")
 
+        except AppError:
+            raise
         except Exception as e:
             raise VectorDatabaseCreationError(str(e)) from e
 

@@ -194,19 +194,37 @@ class EmbeddingError(VectorDatabaseError):
 class VectorDatabaseCreationError(VectorDatabaseError):
     """
     Custom exception for errors occurring during the attempt
-    to create the database
+    to create the database.
     """
     def __init__(self, reason: str = None) -> None:
         """
-        Method for initializing the exception message
+        Method for initializing the exception message.
 
         Args:
             reason (str, optional): Description of the underlying error
-                that caused the database creation to fail. When provided,
-                it is appended to the base message so the real cause is
-                not hidden behind a generic error.
+                that caused the database creation to fail.
         """
         message = "Error while trying to create the database"
+        if reason:
+            message = f"{message}: {reason}"
+
+        super().__init__(message)
+
+
+class VectorDatabaseQueryError(VectorDatabaseError):
+    """
+    Custom exception for failures while querying an existing
+    vector database.
+    """
+    def __init__(self, reason: str = None) -> None:
+        """
+        Method for initializing the exception message.
+
+        Args:
+            reason (str, optional): Description of the underlying error
+                that caused the query to fail.
+        """
+        message = "Error while trying to query the database"
         if reason:
             message = f"{message}: {reason}"
 

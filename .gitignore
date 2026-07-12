@@ -1,4 +1,5 @@
 .env
 logs.log
+chess_ai.log
 database
 __pycache__

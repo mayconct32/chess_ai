@@ -5,9 +5,9 @@ from typing import Any, List, Optional
 from langchain_core.documents import Document
 from langchain_chroma.vectorstores import Chroma
 
-from .config import DATABASE_DIR, SIMILARITY_SCORE_THRESHOLD, SIMILARITY_SEARCH_K
-from .exceptions import AppError, VectorDatabaseCreationError, VectorDatabaseQueryError
-from .logging_config import logger
+from config import DATABASE_DIR, SIMILARITY_SCORE_THRESHOLD, SIMILARITY_SEARCH_K
+from exceptions import AppError, VectorDatabaseCreationError, VectorDatabaseQueryError
+from logging_config import logger
 
 
 class VectorDatabaseCreator(ABC):
@@ -84,7 +84,7 @@ class ChromaDatabaseCreator(VectorDatabaseCreator):
         logger.info("Starting database creation pipeline")
 
         try:
-            embedding = self.embedding_provider.get_embedding()
+            embedding = self.embedding_provider
             logger.info(f"Creating vector database at: {self.persist_directory}")
 
             Chroma.from_documents(
@@ -145,7 +145,7 @@ class ChromaDatabaseRepository(VectorDatabaseRepository):
         logger.info(f"Opening vector database at: {self.persist_directory}")
 
         try:
-            embedding = self.embedding_provider.get_embedding()
+            embedding = self.embedding_provider
 
             from langchain_chroma.vectorstores import Chroma
 

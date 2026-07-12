@@ -4,9 +4,8 @@ from typing import Iterator
 
 from google import genai
 
-from .config import API_KEY, GEMINI_VERSION
-from .exceptions import APIKeyNotFoundError, AIModelConnectionError, AIModelRequestError, AppError
-from .logging_config import logger
+from exceptions import APIKeyNotFoundError, AIModelConnectionError, AIModelRequestError, AppError
+from logging_config import logger
 
 
 class AIModelService(ABC):

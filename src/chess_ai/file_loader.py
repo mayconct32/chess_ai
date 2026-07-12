@@ -6,9 +6,9 @@ from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from .config import CHUNK_SIZE, CHUNK_OVERLAP
-from .exceptions import PDFFileNotFoundError, PDFLoadError, FileSplitError
-from .logging_config import logger
+from config import CHUNK_SIZE, CHUNK_OVERLAP
+from exceptions import PDFFileNotFoundError, PDFLoadError, FileSplitError
+from logging_config import logger
 
 
 class FileLoader(ABC):

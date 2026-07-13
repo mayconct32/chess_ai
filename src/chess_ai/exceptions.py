@@ -229,3 +229,60 @@ class VectorDatabaseQueryError(VectorDatabaseError):
             message = f"{message}: {reason}"
 
         super().__init__(message)
+
+
+class ChessEngineError(AppError):
+    """
+    Base class for every exception raised while interacting with the
+    chess engine.
+    """
+
+    def __init__(self, message: str = "Chess engine error") -> None:
+        """
+        Method for initializing the exception message
+
+        Args:
+            message (str): Human-readable description of the chess engine error.
+        """
+
+        super().__init__(message)
+
+
+class ChessEngineAnalysisError(ChessEngineError):
+    """
+    Custom exception for failures while analyzing a chess position.
+    """
+
+    def __init__(self, reason: str = None) -> None:
+        """
+        Method for initializing the exception message
+
+        Args:
+            reason (str, optional): Description of the underlying error
+                that caused the analysis to fail.
+        """
+        message = "Error while trying to analyze the chess position"
+        if reason:
+            message = f"{message}: {reason}"
+
+        super().__init__(message)
+
+
+class ChessEngineInitializationError(ChessEngineError):
+    """
+    Custom exception for failures while initializing the chess engine.
+    """
+
+    def __init__(self, reason: str = None) -> None:
+        """
+        Method for initializing the exception message
+
+        Args:
+            reason (str, optional): Description of the underlying error
+                that caused the initialization to fail.
+        """
+        message = "Error while trying to initialize the chess engine"
+        if reason:
+            message = f"{message}: {reason}"
+
+        super().__init__(message)

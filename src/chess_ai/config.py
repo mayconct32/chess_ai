@@ -17,4 +17,4 @@ GEMINI_VERSION = "gemini-3.1-flash-lite"
 DATABASE_DIR = "./database"
 
 ENGINE_ANALYSIS_TIME = 0.1
-STOCKFISH_PATH = ""
+STOCKFISH_PATH = "stockfish"

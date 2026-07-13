@@ -2,13 +2,18 @@ from pathlib import Path
 
 from langchain_community.embeddings import FastEmbedEmbeddings
 
-from ai_service import AIGeminiService
-from config import API_KEY, DATABASE_DIR, GEMINI_VERSION
-from database import ChromaDatabaseCreator, ChromaDatabaseRepository
-from exceptions import AppError
-from file_loader import FileSplitter, PDFLoader
-from logging_config import configure_logging
-from utils import get_path
+from chess_ai.ai_service import AIGeminiService
+from chess_ai.config import API_KEY, DATABASE_DIR, GEMINI_VERSION
+from chess_ai.database import ChromaDatabaseCreator, ChromaDatabaseRepository
+from chess_ai.engine import ChessEngineService
+from chess_ai.exceptions import (
+    AppError,
+    ChessEngineAnalysisError,
+    ChessEngineInitializationError,
+)
+from chess_ai.file_loader import FileSplitter, PDFLoader
+from chess_ai.logging_config import configure_logging
+from chess_ai.utils import get_path
 
 
 ANSI_COLORS = {

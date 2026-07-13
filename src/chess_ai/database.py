@@ -5,9 +5,9 @@ from typing import Any, List, Optional
 from langchain_core.documents import Document
 from langchain_chroma.vectorstores import Chroma
 
-from config import DATABASE_DIR, SIMILARITY_SCORE_THRESHOLD, SIMILARITY_SEARCH_K
-from exceptions import AppError, VectorDatabaseCreationError, VectorDatabaseQueryError
-from logging_config import logger
+from chess_ai.config import DATABASE_DIR, SIMILARITY_SCORE_THRESHOLD, SIMILARITY_SEARCH_K
+from chess_ai.exceptions import AppError, VectorDatabaseCreationError, VectorDatabaseQueryError
+from chess_ai.logging_config import logger
 
 
 class VectorDatabaseCreator(ABC):

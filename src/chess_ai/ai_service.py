@@ -4,8 +4,13 @@ from typing import Iterator
 
 from google import genai
 
-from exceptions import APIKeyNotFoundError, AIModelConnectionError, AIModelRequestError, AppError
-from logging_config import logger
+from chess_ai.exceptions import (
+    APIKeyNotFoundError,
+    AIModelConnectionError,
+    AIModelRequestError,
+    AppError,
+)
+from chess_ai.logging_config import logger
 
 
 class AIModelService(ABC):

@@ -1,4 +1,4 @@
-from logging_config import logger
+from chess_ai.logging_config import logger
 
 
 class AppError(Exception):

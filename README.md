@@ -45,17 +45,23 @@ poetry install
 
 ## Execução
 
-Para iniciar a aplicação em modo CLI:
+Para iniciar a aplicação:
 
 ```bash
 poetry run python -m chess_ai.main
 ```
+
+Ao iniciar, a aplicação perguntará qual interface deseja utilizar:
+
+- **CLI** - interface de linha de comando no terminal;
+- **GUI** - interface gráfica (ainda não disponível).
 
 ### Como usar
 
 - Digite uma pergunta normal para obter uma resposta baseada no contexto do PDF.
 - Use o prefixo `FEN:` para enviar uma posição e solicitar análise do engine.
 - Digite `exit` ou `quit` para encerrar a sessão.
+- Pressione `CTRL + C` para interromper a execução.
 
 ### Exemplo
 
